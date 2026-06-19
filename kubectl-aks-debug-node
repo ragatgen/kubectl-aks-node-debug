@@ -1,72 +1,112 @@
 #!/bin/bash
 
-# Plugin name
-PLUGIN_NAME="kubectl-aks-debug-node"
+set -euo pipefail
 
-# Show help message
+# Plugin binary name
+PLUGIN_NAME="kubectl-aks-node-debug"
+
 show_help() {
-    echo "Usage: $PLUGIN_NAME"
+    echo "Usage: kubectl aks-node-debug"
     echo
-    echo "Debugs a node in an Azure Kubernetes Service (AKS) cluster."
+    echo "Starts an interactive node-level debug session in an Azure Kubernetes Service (AKS) cluster."
     echo
     echo "Prerequisites:"
-    echo "  - You must be connected to an AKS cluster using 'az aks get-credentials'."
-    echo "  - The cluster must allow 'kubectl debug' (Kubernetes >= 1.20)."
+    echo "  - kubectl must be installed and configured."
+    echo "  - You must be connected to an AKS cluster."
+    echo "  - The cluster must support 'kubectl debug'."
+    echo "  - Your user must have permissions to create debug pods."
     echo
     echo "Example:"
-    echo "  $PLUGIN_NAME"
+    echo "  kubectl aks-node-debug"
     exit 0
 }
 
-# Handle --help flag
-if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     show_help
 fi
 
-# Check if user is logged into Azure CLI
-if ! az account show &>/dev/null; then
+if ! command -v kubectl >/dev/null 2>&1; then
+    echo "Error: kubectl is not installed or not available in PATH."
+    exit 1
+fi
+
+if ! command -v az >/dev/null 2>&1; then
+    echo "Error: Azure CLI is not installed or not available in PATH."
+    exit 1
+fi
+
+if ! az account show >/dev/null 2>&1; then
     echo "Error: You are not logged into Azure. Run 'az login' first."
     exit 1
 fi
 
-# Verify that AKS context is set
-AKS_CONTEXT=$(kubectl config current-context 2>/dev/null)
-if [[ -z "$AKS_CONTEXT" || "$AKS_CONTEXT" != *"aks"* ]]; then
-    echo "Warning: Your current Kubernetes context ($AKS_CONTEXT) does not appear to be an AKS cluster."
-    echo "Ensure you are connected using: az aks get-credentials --resource-group <RG> --name <AKS_CLUSTER>"
+AKS_CONTEXT=$(kubectl config current-context 2>/dev/null || true)
+
+if [[ -z "$AKS_CONTEXT" ]]; then
+    echo "Error: No Kubernetes context is currently selected."
+    echo "Run: az aks get-credentials --resource-group <resource-group> --name <cluster-name>"
     exit 1
 fi
 
-# Check if kubectl debug is available
-if ! kubectl debug --help &>/dev/null; then
-    echo "Error: 'kubectl debug' is not supported on your cluster."
-    echo "Ensure your AKS version is >= 1.20 and your cluster allows debugging."
+if [[ "$AKS_CONTEXT" != *"aks"* ]]; then
+    echo "Warning: Current context '$AKS_CONTEXT' does not appear to be an AKS context."
+    echo "Run: az aks get-credentials --resource-group <resource-group> --name <cluster-name>"
     exit 1
 fi
 
-# Get available nodes
-#kubectl get nodes
-nodes=($(kubectl get nodes -o name | sed 's|node/||'))
+if ! kubectl auth can-i get nodes >/dev/null 2>&1; then
+    echo "Error: Your Kubernetes identity cannot list nodes."
+    exit 1
+fi
 
-# Display the nodes with numbers
+if ! kubectl auth can-i create pods >/dev/null 2>&1; then
+    echo "Error: Your Kubernetes identity cannot create debug pods."
+    exit 1
+fi
+
+if ! kubectl debug --help >/dev/null 2>&1; then
+    echo "Error: 'kubectl debug' is not available in your kubectl client."
+    exit 1
+fi
+
+mapfile -t nodes < <(kubectl get nodes -o name | sed 's|node/||')
+
+if [[ "${#nodes[@]}" -eq 0 ]]; then
+    echo "Error: No nodes found in the current cluster."
+    exit 1
+fi
+
 echo "Available nodes in your AKS cluster:"
+echo
+
 for i in "${!nodes[@]}"; do
-  echo "$((i+1))) ${nodes[$i]}"
+    echo "$((i + 1))) ${nodes[$i]}"
 done
 
-# Prompt user to choose a node
-read -p "Choose one node by number: " choice
-# Validate input
-if [[ "$choice" -ge 1 && "$choice" -le "${#nodes[@]}" ]]; then
-  NODE_NAME="${nodes[$((choice-1))]}"
-  echo "You selected: $NODE_NAME"
-else
-  echo "Invalid choice. Please run the script again."
-  exit 1
+echo
+read -rp "Choose one node by number: " choice
+
+if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+    echo "Invalid choice. Please enter a number."
+    exit 1
 fi
 
-# Run the debug command
-echo "Debugging node: $NODE_NAME..."
-kubectl debug node/$NODE_NAME -it --image=mcr.microsoft.com/cbl-mariner/busybox:2.0 -- chroot /host
+if (( choice < 1 || choice > ${#nodes[@]} )); then
+    echo "Invalid choice. Please select a number between 1 and ${#nodes[@]}."
+    exit 1
+fi
 
+NODE_NAME="${nodes[$((choice - 1))]}"
+
+echo
+echo "You selected: $NODE_NAME"
+echo "Starting debug session on node: $NODE_NAME"
+echo
+
+kubectl debug "node/$NODE_NAME" \
+    -it \
+    --image=mcr.microsoft.com/cbl-mariner/busybox:2.0 \
+    -- chroot /host
+
+echo
 echo "Exited debug session for node: $NODE_NAME"

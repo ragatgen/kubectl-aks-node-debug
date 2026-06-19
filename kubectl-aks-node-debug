@@ -80,7 +80,7 @@ if [[ "${#nodes[@]}" -eq 0 ]]; then
     exit 1
 fi
 
-echo "Available nodes:"
+echo "Available cluster nodes:"
 echo
 
 for i in "${!nodes[@]}"; do

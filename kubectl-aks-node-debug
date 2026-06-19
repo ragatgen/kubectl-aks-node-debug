@@ -55,11 +55,8 @@ if [[ -z "$AKS_CONTEXT" ]]; then
     exit 1
 fi
 
-if [[ "$AKS_CONTEXT" != *"aks"* ]]; then
-    echo "Warning: Current context '$AKS_CONTEXT' does not appear to be an AKS context."
-    echo "Run: az aks get-credentials --resource-group <resource-group> --name <cluster-name>"
-    exit 1
-fi
+echo "Using Kubernetes context: $AKS_CONTEXT"
+echo
 
 if ! kubectl auth can-i get nodes >/dev/null 2>&1; then
     echo "Error: Your Kubernetes identity cannot list nodes."
@@ -83,7 +80,7 @@ if [[ "${#nodes[@]}" -eq 0 ]]; then
     exit 1
 fi
 
-echo "Available nodes in your AKS cluster:"
+echo "Available nodes:"
 echo
 
 for i in "${!nodes[@]}"; do

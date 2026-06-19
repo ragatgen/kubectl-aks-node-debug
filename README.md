@@ -1,14 +1,14 @@
-# aks-debug-node
+# aks-node-debug
 
 This repository provides a `kubectl` plugin to debug nodes in your AKS (Azure Kubernetes Service) cluster.
 
 ## Installation
 
 ```bash
-git clone https://github.com/ragatgen/aks-debug-node.git
+git clone https://github.com/ragatgen/aks-node-debug.git
 cd aks-debug-node
-sudo mv aks-debug-node /usr/local/bin/
-sudo chmod +x /usr/local/bin/aks-debug-node
+sudo mv aks-node-debug /usr/local/bin/
+sudo chmod +x /usr/local/bin/aks-node-debug
 ```
 
 ## Verify Installation
@@ -21,7 +21,7 @@ kubectl plugin list
 
 Expected output:
 ```
-/usr/local/bin/aks-debug-node
+/usr/local/bin/aks-node-debug
 ```
 
 ## Usage
@@ -29,7 +29,7 @@ Expected output:
 To start debugging a node in your AKS cluster:
 
 ```bash
-aks-debug-node
+aks-node-debug
 ```
 
 Example interaction:
